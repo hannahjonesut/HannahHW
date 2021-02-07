@@ -1,0 +1,366 @@
+---
+title: "Data Mining HW1"
+author: "Hannah Jones"
+date: "2/5/2021"
+output:
+  md_document:
+    variant: markdown_github
+---
+```{r setup, echo=FALSE, message=FALSE, include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE
+)
+library(tidyverse)
+library(ggplot2)
+library(rsample)
+library(caret)
+library(modelr)
+library(parallel)
+library(foreach)
+library(scales)
+```
+
+## Problem 1: Gas Prices ##
+```{r, echo=FALSE}
+gasprices <- read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/GasPrices.csv')
+```
+
+### A) Hypothesis: Gas stations charge more if they lack direct competition in sight ###
+
+```{r, echo=FALSE}
+
+ggplot(data=gasprices) + 
+  geom_boxplot(aes(x=Competitors, y=Price))+ 
+  labs(
+    title = "Gas Price vs Competition in Sight",
+    x="Competition in Sight?",
+    y="Gas Price"
+  )
+
+```
+
+The graph above suggests that gas prices do tend to be higher if there is no direct competition in sight. The average price of gas at a gas 
+station without competition in sight is $0.03 higher than when competition is not present.
+
+### B) Hypothesis: The richer the area, the higher the gas price ###
+```{r, echo=FALSE}
+
+ggplot(data = gasprices) + 
+  geom_point(mapping = aes(x = Income, y = Price)) + 
+  labs(
+    title = "Gas Price based on Area Mean Income",
+    x="Area Mean Income",
+    y="Gas Price"
+  )
+```
+
+The graph above suggests that areas with higher mean incomes also have higher gas prices on average, though there is a large amount of variation.  Generally, these 
+variables seem to be positively correlated, however there are a few outliers.
+
+### C) Hypothesis: Shell charges more than other brands ###
+
+```{r, echo=FALSE}
+d1 = gasprices %>%
+  group_by(Brand) %>%
+  summarize(avg_price = mean(Price),
+            med_price = median(Price))
+
+ggplot(data = d1) + 
+  geom_col(mapping = aes(x=Brand, y=avg_price), position = "dodge") +
+  scale_y_continuous(limits=c(1.7,1.9),oob = rescale_none)+ 
+  labs(
+    title = "Gas Price based on Brand",
+    x="Gas Brand",
+    y="Price"
+  )
+```
+
+As shown above, there is no significant evidence that Shell charges more for gas than all other brands.  The data suggests that Shell and Chevron-Texaco gas is comparably priced, while Exxon-Mobil and all other gas brands tend to be lower.
+
+### D) Hypothesis: Gas stations at stoplights charge more ###
+```{r, echo=FALSE,warning=FALSE}
+
+ggplot(data = gasprices) + 
+  geom_histogram(aes(x=Price), binwidth = .02) + 
+  facet_wrap(~Stoplight) + 
+  labs(
+    title = "Gas Price based on Proximity to Stoplight",
+    x="Price of Gas",
+    y="Density"
+  )
+```
+
+The graph above shows the price of gas, split between gas stations not in close proximity to a stoplight on the left, and close to a stoplight on the right.  The graph suggests that in general, gas stations close to stoplights tend to charge more than gas stations further from stoplights.  
+
+### E) Hypothesis: Gas stations with direct highway access charge more ###
+
+```{r, echo=FALSE}
+
+ggplot(data = gasprices) + 
+  geom_boxplot(aes(x=Highway, y=Price)) + 
+  labs(
+    title = "Gas Price based on Proximity to Highway",
+    x="Direct Highway Access?",
+    y="Price"
+  )
+```
+
+The graph above shows the mean and distribution of gas prices at gas stations without direct highway access (on the left) and with direct highway access (on the right).  The graph suggests that gas stations without direct highway access tend to charge less than gas stations with direct highway access.
+
+## Problem 2: Bike Share Network ##
+
+```{r, echo=FALSE}
+bikeshare <- read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/bikeshare.csv')
+```
+
+### Plot A: a line graph showing average bike rentals (total) versus hour of the day (hr) ###
+```{r, echo=FALSE}
+
+bikes_hr = bikeshare %>%
+  group_by(hr) %>%
+  summarize(hourly_total = sum(total))
+
+#ggplot(data=bikes_hr) +
+ # geom_col(aes(x=hr, y=hourly_total))
+
+ggplot(data=bikes_hr) +
+  geom_line(aes(x=hr, y=hourly_total)) +
+  labs(title="Bike Rentals by Hour", 
+       y="Total Rentals",
+       x = "Hour")
+```
+
+### Plot B: a faceted line graph showing average bike rentals versus hour of the day, faceted according to whether it is a working day (workingday). ###
+
+The graph above shows total bike rentals by the time of day.  Bike rentals see local peaks around 8am, noon and 5pm.  This data is consistent with expectations of bike rentals increasing during morning commutes, lunch and evening commutes.
+
+```{r, echo=FALSE}
+bikes_hr2 = bikeshare %>%
+  group_by(hr, workingday) %>%
+  summarize(hourly_total = sum(total))
+
+ggplot(data=bikes_hr2) +
+  geom_line(aes(x=hr, y=hourly_total)) +
+  facet_wrap(~workingday) +
+  labs(title="Bike Rentals by Hour (Non-Working Day vs Working Day)", 
+       y="Total Rentals",
+       x = "Hour")
+```
+
+The above graph shows the bike rental data split by weekends on the left, and work days on the right.  On the weekend, bike rentals peak mid-day.  On weekdays, bike rentals peak during morning and evening commutes and increase slightly during lunch.
+
+### Plot C: a faceted bar plot showing average ridership during the 8 AM hour by weather situation code (weathersit), faceted according to whether it is a working day or not. ###
+
+```{r, echo=FALSE}
+
+eightam_tot = bikeshare %>%
+  filter(hr == 8)%>%
+  group_by(weathersit, workingday)%>%
+  summarize(weather_tot = sum(total))
+
+ggplot(data = eightam_tot)+
+  geom_col(aes(x=weathersit, y=weather_tot))+
+  facet_wrap(~workingday) +
+  labs(title="Bike Rentals by Weather", 
+       y="Total Rentals",
+       x = "Weather Situation")
+
+```
+
+The graph above shows bike rentals split by weekends (on the left) and weekdays (on the right), as well as by weather.  A weather situation of 1  indicates clear and dry conditions, 2 indicates misty, and 3 indicates rain.  It is clear that rentals on both weekdays and weekends are significantly higher when the weather is nice.  When the weather is rainy, rentals are close to zero on weekends, but rentals are greater than zero on rainy weekdays.  This is likely due to commuters having less choice when going to/from work, while on weekends, riders will simply not go out.
+
+## Problem 3: Austin Bergstrom Flight Data ##
+```{r, echo=FALSE}
+ABIA <- read.csv("https://raw.githubusercontent.com/jgscott/ECO395M/master/data/ABIA.csv") 
+```
+
+The flight data can be viewed with regard to cancellations by destination, as shown below.  The most-often cancelled flights are to Dallas (both DFW and DAL), and Chicago O'Hare (ORD).
+
+```{r, echo=FALSE}
+destination = ABIA%>%
+  filter(Cancelled==1)%>%
+  filter(Dest != "AUS")%>%
+  group_by (Dest)%>%
+  summarize(dest_cancel = sum(Cancelled))
+
+ggplot(data = destination)+
+  geom_col(aes(x=dest_cancel, y = Dest))+ 
+  labs(
+    title = "ABIA Flight Cancellation by Destination",
+    x="Number of Cancellations",
+    y="Destination"
+  )
+```
+
+Cancellations at these three airports (DAL, DFW, ORD) can be further examined by day of the week, as shown below.  
+
+```{r, echo=FALSE}
+time_dest = ABIA %>%
+  filter(Dest == "DFW" | Dest == "DAL" | Dest == "ORD")%>%
+  group_by(DayOfWeek, Dest)%>%
+  summarize(dal_cancel = sum(Cancelled))
+
+ggplot(data = time_dest) +
+  geom_col(aes(x=DayOfWeek, y= dal_cancel)) +
+  facet_wrap(~Dest)+ 
+  labs(
+    title = "ABIA Flight Cancellation by Destination",
+    x="Day of the Week (1 = Monday)",
+    y="Number of Cancellations"
+  )
+
+```
+
+For all three destinations, cancellations peak on Tuesdays.  It is interesting that Tuesdays are the most-likely day tfor a flight to be cancelled for all three of these destinations. To see if this trend is consistent for all destinations out of ABIA, we can look at all cancellations by day of the week.
+
+```{r, echo=FALSE}
+cancel = ABIA %>%
+  filter(Cancelled==1)%>%
+  group_by(CancellationCode, DayOfWeek)%>%
+  summarize(cancelled_flights=sum(Cancelled))
+
+ggplot(data = cancel)+
+  geom_col(aes(x=DayOfWeek, y = cancelled_flights))+ 
+  labs(
+    title = "ABIA Flight Cancellation by Day of Week",
+    x="Day of the Week (1 = Monday)",
+    y="Number of Cancellations"
+  )
+```
+
+As shown above, for all destinations out of ABIA, Tuesday flights are the most likely to be canceled.  This series of charts yields two major takeaways: 1) Tuesdays flights are most likely to be canceled, and 2) Dallas and O'Hare are the most likely destinations to be cancelled. 
+
+## Problem 4: S-Class Price based on Mileage and Trim ##
+Using K-nearest neighbors to predict S Class price based on mileage, given trim level, yields the results below:
+```{r, echo = FALSE}
+sclass <- read.csv("https://raw.githubusercontent.com/jgscott/ECO395M/master/data/sclass.csv") 
+```
+
+### 350 Trim ###
+
+The K versus RMSE chart is shown below:
+
+```{r, echo=FALSE}
+sclass_350 = sclass %>%
+  filter(trim == "350")
+
+k_grid = c(2, 4, 6, 8, 10, 15, 20, 25, 30, 35, 40, 45,
+           50, 60, 70, 80, 90, 100, 125, 150, 175, 200, 250, 300)
+rmse_out = foreach(i=1:10, .combine='rbind') %dopar% {
+  sclass350_split =  initial_split(sclass_350, prop=0.8)
+  sclass350_train = training(sclass350_split)
+  sclass350_test  = testing(sclass350_split)
+  this_rmse = foreach(k = k_grid, .combine='c') %do% {
+    # train the model and calculate RMSE on the test set
+    knn_model = knnreg(price ~ mileage, data=sclass350_train, k = k, use.all=TRUE)
+    modelr::rmse(knn_model, sclass350_test)
+  }
+  data.frame(k=k_grid, rmse=this_rmse)
+}
+rmse_out = arrange(rmse_out, k)
+
+ggplot(rmse_out) + geom_boxplot(aes(x=factor(k), y=rmse)) + theme_bw(base_size=7)+ 
+  labs(
+    title = "RMSE for Different K-values",
+    x="K Values",
+    y="RMSE"
+  )
+
+```
+
+ The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out at k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 125.
+ 
+```{r, echo=FALSE}
+# Min error at k=15, max range is k=125
+sclass350_split =  initial_split(sclass_350, prop=0.8)
+sclass350_train = training(sclass350_split)
+sclass350_test  = testing(sclass350_split)
+knn125 = knnreg(price ~ mileage, data=sclass350_train, k=125)
+
+# plot the fit
+
+# attach the predictions to the test data frame
+sclass350_test = sclass350_test%>%
+  mutate(price350_pred = predict(knn125, sclass350_test))
+
+p_test = ggplot(data = sclass350_test) + 
+  geom_point(mapping = aes(x = mileage, y = price), alpha=0.2) 
+
+# now add the predictions
+p_test + geom_line(aes(x = mileage, y = price350_pred), color='red', size=1.5)+ 
+  labs(
+    title = "350 Trim Price based on Mileage ",
+    x="Mileage",
+    y="Price"
+  )
+
+```
+
+The above graph shows the fitted model predictions for price versus mileage for the 350 trim level. 
+
+
+### 65 AMG Trim ##
+
+```{r, echo=FALSE}
+
+sclass_65= sclass %>%
+  filter(trim == "65 AMG")
+
+k_grid = c(2, 4, 6, 8, 10, 15, 20, 25, 30, 35, 40, 45,
+           50, 60, 70, 80, 90, 100, 125, 150, 175, 200)
+rmse_out65 = foreach(i=1:10, .combine='rbind') %dopar% {
+  sclass65_split =  initial_split(sclass_65, prop=0.8)
+  sclass65_train = training(sclass65_split)
+  sclass65_test  = testing(sclass65_split)
+  this_rmse65 = foreach(k = k_grid, .combine='c') %do% {
+    # train the model and calculate RMSE on the test set
+    knn_model = knnreg(price ~ mileage, data=sclass65_train, k = k, use.all=TRUE)
+    modelr::rmse(knn_model, sclass65_test)
+  }
+  data.frame(k=k_grid, rmse=this_rmse65)
+}
+rmse_out65 = arrange(rmse_out65, k)
+
+ggplot(rmse_out65) + geom_boxplot(aes(x=factor(k), y=rmse)) + theme_bw(base_size=7)+ 
+  labs(
+    title = "RMSE for Different K-values",
+    x="K Values",
+    y="RMSE"
+  )
+
+```
+
+The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out at k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 60.
+
+```{r, echo=FALSE}
+# Min error at k=15, max range is k=60
+sclass65_split =  initial_split(sclass_65, prop=0.8)
+sclass65_train = training(sclass65_split)
+sclass65_test  = testing(sclass65_split)
+knn60 = knnreg(price ~ mileage, data=sclass65_train, k=60)
+
+
+# plot the fit
+
+# attach the predictions to the test data frame
+sclass65_test = sclass65_test%>%
+  mutate(price65_pred = predict(knn60, sclass65_test))
+
+p_test = ggplot(data = sclass65_test) + 
+  geom_point(mapping = aes(x = mileage, y = price), alpha=0.2) 
+
+#add predictions
+p_test + geom_line(aes(x = mileage, y = price65_pred), color='red', size=1.5)+ 
+  labs(
+    title = "65 AMG Trim Price based on Mileage ",
+    x="Mileage",
+    y="Price"
+  )
+
+```
+
+The above graph shows the fitted model predictions for price versus mileage for the 65 AMG trim level. 
+
+Looking at the two K-vs-RMSE graphs above for the two trim levels, it is interesting to see that though both graphs reach their low RMSE at k=15, using the one standard error rule yields the optimal value of k=125 for the 350 trim-level and k=60 for the 65 AMG trim level.  This is likely due to the distribution of data point for the two trim levels.  The 350 trim level has a good distribution of data, so is able to be represented through a prediction based on a large k-value.  There are more data points with a more uniform distribution, so can be captured with a larger k-value.  However, the 65 AMG trim data has fewer data points, as well as clustering at the 0 mileage point.  Therefore, the 65 AMG model needs to be more sensitive to the data, so using a smaller k-value will capture this.

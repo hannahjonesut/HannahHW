@@ -1,0 +1,19 @@
+---
+title: "First Markdown"
+author: "Hannah Jones"
+date: "1/25/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+This is my first markdown document
+
+Let's load some data
+
+```{r}
+library(datasets)
+data("airquality")
+summary(airquality)
+```
+
