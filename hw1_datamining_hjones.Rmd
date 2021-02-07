@@ -270,20 +270,20 @@ ggplot(rmse_out) + geom_boxplot(aes(x=factor(k), y=rmse)) + theme_bw(base_size=7
 
 ```
 
- The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out at k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 125.
+ The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out somewhere between k=10 and k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 60.
  
 ```{r, echo=FALSE}
 # Min error at k=15, max range is k=125
 sclass350_split =  initial_split(sclass_350, prop=0.8)
 sclass350_train = training(sclass350_split)
 sclass350_test  = testing(sclass350_split)
-knn125 = knnreg(price ~ mileage, data=sclass350_train, k=125)
+knn60 = knnreg(price ~ mileage, data=sclass350_train, k=60)
 
 # plot the fit
 
 # attach the predictions to the test data frame
 sclass350_test = sclass350_test%>%
-  mutate(price350_pred = predict(knn125, sclass350_test))
+  mutate(price350_pred = predict(knn60, sclass350_test))
 
 p_test = ggplot(data = sclass350_test) + 
   geom_point(mapping = aes(x = mileage, y = price), alpha=0.2) 
@@ -332,21 +332,21 @@ ggplot(rmse_out65) + geom_boxplot(aes(x=factor(k), y=rmse)) + theme_bw(base_size
 
 ```
 
-The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out at k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 60.
+The above chart shows that K value versus RMSE.  The RMSE mean value bottoms out at k=15.  Using the "1SE" (one standard error) rule, taking the k-value where the mean RMSE is about one standard error above the minimum, yields an optimal k-value of 50.
 
 ```{r, echo=FALSE}
 # Min error at k=15, max range is k=60
 sclass65_split =  initial_split(sclass_65, prop=0.8)
 sclass65_train = training(sclass65_split)
 sclass65_test  = testing(sclass65_split)
-knn60 = knnreg(price ~ mileage, data=sclass65_train, k=60)
+knn50 = knnreg(price ~ mileage, data=sclass65_train, k=50)
 
 
 # plot the fit
 
 # attach the predictions to the test data frame
 sclass65_test = sclass65_test%>%
-  mutate(price65_pred = predict(knn60, sclass65_test))
+  mutate(price65_pred = predict(knn50, sclass65_test))
 
 p_test = ggplot(data = sclass65_test) + 
   geom_point(mapping = aes(x = mileage, y = price), alpha=0.2) 
@@ -363,4 +363,4 @@ p_test + geom_line(aes(x = mileage, y = price65_pred), color='red', size=1.5)+
 
 The above graph shows the fitted model predictions for price versus mileage for the 65 AMG trim level. 
 
-Looking at the two K-vs-RMSE graphs above for the two trim levels, it is interesting to see that though both graphs reach their low RMSE at k=15, using the one standard error rule yields the optimal value of k=125 for the 350 trim-level and k=60 for the 65 AMG trim level.  This is likely due to the distribution of data point for the two trim levels.  The 350 trim level has a good distribution of data, so is able to be represented through a prediction based on a large k-value.  There are more data points with a more uniform distribution, so can be captured with a larger k-value.  However, the 65 AMG trim data has fewer data points, as well as clustering at the 0 mileage point.  Therefore, the 65 AMG model needs to be more sensitive to the data, so using a smaller k-value will capture this.
+Looking at the two K-vs-RMSE graphs above for the two trim levels, it is interesting to see that though both graphs reach their low RMSE at k=15, using the one standard error rule yields the optimal value of k=60 for the 350 trim-level and k=50 for the 65 AMG trim level.  This is likely due to the distribution of data point for the two trim levels.  The 350 trim level has a good distribution of data, so is able to be represented through a prediction based on a large k-value.  There are more data points with a more uniform distribution, so can be captured with a larger k-value.  However, the 65 AMG trim data has fewer data points, as well as clustering at the 0 mileage point.  Therefore, the 65 AMG model needs to be more sensitive to the data, so using a smaller k-value will capture this.

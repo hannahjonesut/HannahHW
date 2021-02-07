@@ -123,9 +123,9 @@ The K versus RMSE chart is shown below:
 ![](hw1_datamining_hjones_files/figure-markdown_github/unnamed-chunk-16-1.png)
 
 The above chart shows that K value versus RMSE. The RMSE mean value
-bottoms out at k=15. Using the “1SE” (one standard error) rule, taking
-the k-value where the mean RMSE is about one standard error above the
-minimum, yields an optimal k-value of 125.
+bottoms out somewhere between k=10 and k=15. Using the “1SE” (one
+standard error) rule, taking the k-value where the mean RMSE is about
+one standard error above the minimum, yields an optimal k-value of 60.
 
 ![](hw1_datamining_hjones_files/figure-markdown_github/unnamed-chunk-17-1.png)
 
@@ -139,7 +139,7 @@ mileage for the 350 trim level.
 The above chart shows that K value versus RMSE. The RMSE mean value
 bottoms out at k=15. Using the “1SE” (one standard error) rule, taking
 the k-value where the mean RMSE is about one standard error above the
-minimum, yields an optimal k-value of 60.
+minimum, yields an optimal k-value of 50.
 
 ![](hw1_datamining_hjones_files/figure-markdown_github/unnamed-chunk-19-1.png)
 
@@ -148,8 +148,8 @@ mileage for the 65 AMG trim level.
 
 Looking at the two K-vs-RMSE graphs above for the two trim levels, it is
 interesting to see that though both graphs reach their low RMSE at k=15,
-using the one standard error rule yields the optimal value of k=125 for
-the 350 trim-level and k=60 for the 65 AMG trim level. This is likely
+using the one standard error rule yields the optimal value of k=60 for
+the 350 trim-level and k=50 for the 65 AMG trim level. This is likely
 due to the distribution of data point for the two trim levels. The 350
 trim level has a good distribution of data, so is able to be represented
 through a prediction based on a large k-value. There are more data
