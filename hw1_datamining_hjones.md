@@ -55,12 +55,12 @@ Problem 2: Bike Share Network
 
 ![](hw1_datamining_hjones_files/figure-markdown_github/unnamed-chunk-8-1.png)
 
-### Plot B: a faceted line graph showing average bike rentals versus hour of the day, faceted according to whether it is a working day (workingday).
-
 The graph above shows total bike rentals by the time of day. Bike
 rentals see local peaks around 8am, noon and 5pm. This data is
 consistent with expectations of bike rentals increasing during morning
 commutes, lunch and evening commutes.
+
+### Plot B: a faceted line graph showing average bike rentals versus hour of the day, faceted according to whether it is a working day (workingday).
 
 ![](hw1_datamining_hjones_files/figure-markdown_github/unnamed-chunk-9-1.png)
 
