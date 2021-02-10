@@ -30,7 +30,8 @@ d1
 # Now we can use d1 to make a barplot of average gas price by Brand.
 # Use geom_col to make a barplot
 ggplot(data = d1) + 
-  geom_col(mapping = aes(x=Brand, y=avg_price))
+  geom_col(mapping = aes(x=Brand, y=avg_price)) +
+  ylim(1.75, 2)
 
 #D) Gas stations at stoplights charge more (faceted histogram). 
 #plot stoplight vs price
