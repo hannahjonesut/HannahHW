@@ -89,4 +89,67 @@ rmselm_out = foreach(i=1:10, .combine='rbind') %dopar% {
   }
   data.frame(i=1:10, rmse=this_rmse)
 }
+ggplot(rmse_out) + geom_boxplot(aes(x=factor(k), y=rmse)) + theme_bw(base_size=7)+ 
+  labs(
+    title = "RMSE for Different K-values",
+    x="K Values",
+    y="RMSE"
+  )
+
+# Min error at k=6, max range is k=50
+saratoga_split =  initial_split(saratoga_scale, prop=0.8)
+saratoga_train = training(saratoga_split)
+saratoga_test  = testing(saratoga_split)
+knn50 = knnreg(price ~ age + newConstruction + bathrooms + rooms + waterfront + centralAir + landValue+lotSize + 
+                 livingArea+bedrooms + rooms, data=saratoga_train, k=50)
+
+saratoga_test = saratoga_test%>%
+  mutate(price_pred = predict(knn50, saratoga_test))
+
+p_test = ggplot(data = saratoga_test) + 
+  geom_point(mapping = aes(x = ., y = price), alpha=0.2) 
+
 rmselm_out=arrange(rmse_out, i)
+
+
+cov_bal<-data.frame(
+  Model = c("Medium Model", "Linear Model", "KNN Model"),
+  RMSE_all = c('rmsemed_out_mean', 'rmsemlm_out_mean', mean_rmse_knn$mean)
+)
+
+cov_bal %>%
+  kable(
+    col.names = c("Mean Error (RMSE)"),
+    digits = 3,
+    caption = "Panel A Covariate Balance"
+  )%>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+phat_val_test = predict(base3hand_val, hotels_val_folds, type='response')
+yhat_val_test = ifelse(phat_val_test > 0.5, 1, 0)
+
+
+foreach(i=1:20, .combine='rbind') %dopar%{
+  if(fold_id == i)
+    phat_val_test = predict(base3hand_val, hotels_val_folds, type='response')
+  yhat_val_test = ifelse(phat_val_test > 0.5, 1, 0)
+}
+
+prop_children = mean(children)
+count_children = sum(children)
+
+c('yhat_val_test', 'phat_val_test', 'prop_children', 'count_children')
+
+
+split_folds <- split(hotels_val_folds, fold_id)
+
+foreach(i = 1:fold_id, .combine='rbind')%dopar%{
+  phat_val_test = predict(base3hand_val, hotels_val_folds, type='response')
+  yhat_val_test = ifelse(phat_val_test > 0.5, 1, 0)
+}
+
+childrenv= hotels_val$children
+flds <- createFolds(childrenv, k = 20, list = TRUE, returnTrain = FALSE)
+names(flds)[1] <- "train"
+
