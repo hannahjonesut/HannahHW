@@ -289,5 +289,21 @@ ggplot(data = fold_groups)+
   xlab('Fold ID')+
   ylab('Difference Between Predicted and Observed Children')
 
+final_table<-data.frame(
+  ID_folds = c(fold_groups$fold_id), 
+  predicted = c(fold_groups$count_pred), 
+  actual = c(fold_groups$count_children),
+  difference = c(fold_groups$count_dif)
+)
+
+final_table %>%
+  kable(
+    col.names = c("Fold Number", "Predicted Children", "Actual Children", "Difference"),
+    digits = 0,
+    caption = "Children Epectations vs Reality"
+  )%>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
 
 
