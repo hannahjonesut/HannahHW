@@ -1,0 +1,221 @@
+---
+title: "Data Mining Homework 4"
+author: "Hannah Jones"
+date: "5/3/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+library(tidyverse)
+library(ggplot2)
+library(rsample)
+library(caret)
+library(modelr)
+library(parallel)
+library(foreach)
+library(scales)
+library(lubridate)
+library(randomForest)
+library(splines)
+library(pdp)
+library(LICORS)  # for kmeans++
+library(foreach)
+library(mosaic)
+library(readr)
+library(arules)  # has a big ecosystem of packages built around it
+library(arulesViz)
+library(igraph)
+library(data.table)
+library(tm) 
+library(tidyverse)
+library(slam)
+library(proxy)
+library(reshape2)
+```
+
+## Clustering and PCA: Wine Color and Quality 
+
+The wine dataset details wine color, quality, and 11 chemical attributes.  Using these variables, I performed principle component analysis, compressing all the variables down into 5 principle components.  Once I examined these components, I found that only 1 component (PC1) was very powerful in its correlation with color, and no principle component consistently is correlated with quality, so I reduced the PCA to just 2 components.  Below is a plot of the two principle components, with the color of each data point denoting the color of the wine in the first graph (red = 1, white = 0), and color denoting wine quality in the second.  
+
+```{r}
+#PROBLEM 1
+wine = read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/wine.csv')
+
+wine$ID <- seq.int(nrow(wine))
+
+wine<- wine%>%
+  mutate(color = ifelse(color == 'red', 1, 0))
+
+wine_ID = wine %>%
+  group_by(ID)%>%
+  summarize_all(mean)%>%
+  column_to_rownames(var = "ID")
+
+pca_ID = prcomp(wine_ID, rank=2, scale=TRUE)
+loadings_ID = pca_ID$rotation
+scores_ID = pca_ID$x
+summary(pca_ID)
+
+qplot(scores_ID[,1], scores_ID[,2], xlab='Component 1', ylab='Component 2', color = wine_ID$color)
+qplot(scores_ID[,1], scores_ID[,2], xlab='Component 1', ylab='Component 2', color = wine_ID$quality)
+
+```
+
+Clearly, component 1 is highly correlated with the wine color.  Neither component is correlated with quality.  I then combine the PC1 and PC2 variables with the dataset for each wine, and build a random forest model of wine color regressed on these components on a training set.  The resulting RMSE from testing the model on a test set against actual wine color is below (~0.05). Additionally, the variable importance plot below confirms that PC1 is most significant in predicting wine color.   
+
+```{r warning = FALSE}
+
+#Predict using PCA
+
+wine_combined = data.frame(wine, pca_ID$x)
+
+train_frac = 0.8
+N = nrow(wine_combined)
+N_train = floor(train_frac*N)
+N_test = N - N_train
+train_ind = sample.int(N, N_train, replace=FALSE) %>% sort
+wine_train = wine_combined[train_ind,]
+wine_test = wine_combined[-train_ind,]
+
+forest_color = randomForest(color ~ PC1 + PC2, data = wine_train)
+
+yhat_forest_color = predict(forest_color, wine_test)
+mean((yhat_forest_color - wine_test$color)^2) %>% sqrt
+
+#no_trees = plot(forest_color)
+varImpPlot(forest_color)
+```
+
+I then tested out the predictive power of this random forest model for predicting wine quality. The RMSE and variable importance plot is below.  PC2 is most important in predicting wine quality, but PC1 is also significant.
+
+```{r}
+
+forest_quality = randomForest(quality ~ PC1 + PC2,
+                            data = wine_train)
+
+yhat_forest_qual = predict(forest_quality, wine_test)
+mean((yhat_forest_qual - wine_test$quality)^2) %>% sqrt
+
+#plot(forest_quality)
+varImpPlot(forest_quality)
+
+```
+
+### Clustering for Wine Color and Quality
+
+I also ran k-means clustering to predict wine color by removing the color and quality variables, and splitting the data into 2 clusters based on the other 11 chemical elements.  To see how effectively the clusters captured color, I attached the cluster assignment to the data and observed that cluster 2 captures mostly red wines, and cluster 1 captures mostly white wines.  I then looked at the RMSE to see how well the clusters align with the actual wine color.  The kmeans-method captured wine color effectively with an RMSE of ~0.09.
+
+```{r}
+
+#use clustering - KMEANS
+
+wine_train = subset(wine, select = -c(color, quality, ID))
+
+wine_train_scaled = scale(wine_train, center=TRUE, scale=TRUE)
+
+# Extract the centers and scales from the rescaled data (which are named attributes)
+mu = attr(wine_train_scaled,"scaled:center")
+sigma = attr(wine_train_scaled,"scaled:scale")
+
+# Run k-means with 2 clusters and 25 starts
+clust1 = kmeans(wine_train_scaled, 2, nstart=25)
+
+wine_clustered = data.frame(wine, clust1$cluster)
+
+wine_clustered <- wine_clustered%>%
+  mutate(predicted = ifelse(clust1.cluster == 2, 1, 0))
+
+#RMSE of clustering
+mean((wine_clustered$predicted - wine_clustered$color)^2) %>% sqrt
+
+# What are the clusters?
+#clust1$center  # not super helpful
+#clust1$center[1,]*sigma + mu
+#clust1$center[2,]*sigma + mu
+
+```
+
+### Conclusion
+
+I recommend using the PCA method of predicting wine color.  Kmeans clustering also does a decnt job of predicting wine color, just is not quite as effective as PCA.  I found that there is no reliable way to predict the wine quality score, which is understandable as quality is objective and dictated by a diverse group of people and palates.  
+
+
+## Market Segmentation: Twitter Marketing
+
+HOW CHOOSE # OF CLUSTERS
+
+In order to streamline and sharpen the marketing efforts of NutrientH2O, we have assembled a dataset of tweet categorizations for the brand's followers.  After analyzing this data, we have a few insights that may lead to more focused, productive marketing.
+
+First of all, looking only at the summery statistics of the tweet categories, we see that health and nutrition, politics and cooking have high tweet frequencies.  Looking a bit deeper, we can understand the nuance of how these topics interact with the other topics to gain a more robust understanding of NutrientH20's followers.
+
+
+```{r}
+social_marketing <- read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/social_marketing.csv', row.names = 1)
+
+social_marketing$ID <- seq.int(nrow(social_marketing))
+
+#cut chatter
+social_cut = social_marketing[,-1]
+
+cor(social_cut)
+
+#center and scale
+X = scale(social_marketing, center=TRUE, scale=TRUE)
+mu = attr(X,"scaled:center")
+sigma = attr(X,"scaled:scale")
+clust1 = kmeans(X, 4, nstart=25)
+
+clust1$center  # not super helpful
+clust1$center[1,]*sigma + mu
+clust1$center[2,]*sigma + mu
+clust1$center[3,]*sigma + mu
+clust1$center[4,]*sigma + mu
+
+#cluster 3 is hgtv vibes
+qplot(cooking, home_and_garden, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 4 is outdoors/green living
+qplot(eco, outdoors, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 3 is beauty, cluster 4 is fitness& health and nutrition
+qplot(personal_fitness, beauty, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 6 is parents, high school and parenting
+qplot(school, parenting, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 2 is travel & news & current events, cluster 6 is food
+qplot(travel, food, data=social_marketing, color=factor(clust1$cluster))
+qplot(travel, news, data=social_marketing, color=factor(clust1$cluster))
+qplot(current_events, news, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 2 is travel, cluster 1 is business
+qplot(business, travel, data=social_marketing, color=factor(clust1$cluster))
+
+#cluster 5 is sports and online gaming, cluster 4 is health and personal fitness, clusters 1 &2 are low of both
+qplot(health_nutrition, sports_playing, data=social_marketing, color=factor(clust1$cluster))
+qplot(health_nutrition, personal_fitness, data=social_marketing, color=factor(clust1$cluster))
+qplot(online_gaming, computers, data=social_marketing, color=factor(clust1$cluster))
+
+#seems like health and nutrition cluster is most active
+
+```
+
+## Association Rules for Grocery Purchases
+
+```{r}
+
+
+```
+
+## Author Attribution
+
+```{r}
+
+
+```
+
+
+
+
