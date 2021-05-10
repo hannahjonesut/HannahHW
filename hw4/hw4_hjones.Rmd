@@ -2,11 +2,11 @@
 title: "Data Mining Homework 4"
 author: "Hannah Jones"
 date: "5/3/2021"
-output: pdf_document
+output: md_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, error = FALSE, warning = FALSE)
 
 library(tidyverse)
 library(ggplot2)
@@ -18,22 +18,18 @@ library(foreach)
 library(scales)
 library(lubridate)
 library(randomForest)
-library(splines)
 library(pdp)
 library(LICORS)  # for kmeans++
 library(foreach)
-library(mosaic)
 library(readr)
 library(arules)  # has a big ecosystem of packages built around it
 library(arulesViz)
 library(igraph)
 library(data.table)
 library(tm) 
-library(tidyverse)
 library(slam)
 library(proxy)
 library(reshape2)
-
 library(cluster)
 library(HSAUR)
 library(fpc)
@@ -283,7 +279,7 @@ listtrans = as(all_lists, "transactions")
 groceryrules2 = apriori(listtrans, 
                      parameter=list(support=.0025, confidence=.25, minlen=1))
 
-arules::inspect(subset(groceryrules2, lift > 4))
+#arules::inspect(subset(groceryrules2, lift > 4))
 
 plot(groceryrules2)
 
@@ -294,7 +290,7 @@ Using the trimmed subset with confidence > 0.6 and support > 0.005 yields the 22
 
 ```{r}
 
-sub1 = subset(groceryrules, subset=confidence > 0.6 & support > 0.005)
+sub1 = subset(groceryrules2, subset=confidence > 0.6 & support > 0.005)
 arules::inspect(sub1)
 plot(sub1, method='graph')
 
@@ -304,7 +300,10 @@ plot(sub1, method='graph')
 If we loosen the rules and only require that the lift be greater than 15, we find these rules below.  Sorting rules based on lift instead of confidence demonstrates clusters of items that are frequently bought together, even if they do not occur enough to result in high confidence or support.  The clusters below can be loosely interpreted as an alcohol cluster, a snack cluster, a baking cluster, a sandwich cluster, and other non-specific clusters.
 
 ```{r}
-sub2 = subset(groceryrules, subset=lift>15)
+groceryrules3 = apriori(listtrans, 
+                     parameter=list(support=.001, confidence=.1, maxlen=8))
+
+sub2 = subset(groceryrules3, subset=lift>15)
 arules::inspect(sub2)
 plot(sub2, method='graph')
 
@@ -312,10 +311,204 @@ plot(sub2, method='graph')
 
 ## Author Attribution
 
+Fo rthis problem, I used text from 50 authors with 50 articles each to predict authorship based on words used.  In order to do this, I first read and cleaned all of the file names from the directory source.  I then read in the text from every article and stored in in a large corpus.  In order to standardize the text, I removed punctuation, capitalization and whitespace, as well as common words using the "SMART" dictionary.
+
+Once all of the training and testing data was processed, I created a Document Term Matrix (DTM) for both the testing and training sets. 
+
+
+
 ```{r}
 
+train_dir = Sys.glob(paths = '/Users/hannahjones/Desktop/ReutersC50/C50train/*')
+train_dir = train_dir[c(1:50)]
+read_files = NULL
+labels = NULL
+for(writer in train_dir){
+  author = substring(writer, first = 1)
+  article = Sys.glob(paste0(writer,'/*.txt'))
+  read_files = append(read_files, article)
+  labels = append(labels, rep(author, length(article)) )
+}
+
+
+readerPlain = function(fname){
+  readPlain(elem=list(content=readLines(fname)), 
+            id=fname, language='en') }
+
+## create a text mining 'corpus' with: 
+documents_raw = Corpus(DirSource(train_dir))
+
+## Some pre-processing/tokenization steps.
+
+train_docs <- documents_raw %>%
+  tm_map(., content_transformer(tolower)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removePunctuation)) %>%
+  tm_map(., content_transformer(stripWhitespace)) %>%
+  tm_map(., content_transformer(removeWords), stopwords("SMART"))
+
+
+## create a doc-term-matrix, 2500 docs, 31423 terms
+DTM_train = DocumentTermMatrix(train_docs)
+
+## Finally, drop those terms that only occur in one or two documents, 3076 terms
+DTM_train2 = removeSparseTerms(DTM_train, 0.96)
+DTM_train2
+```
+
+The training DTM details are above.  I have trimmed the words that are only included a few times in order to eliminate noise.  We are left with ~850 words, down from ~31,000.  I repeat the same process of creating the DTM for the test set of data, except instead of trimming sparse words, I go ahead and set the limitation that all words in the test DTM must also be in the training DTM.
+
+```{r}
+# Data frame of 2500 variables and 641 variables (The first matrix is completed)
+DF_train <- data.frame(as.matrix(DTM_train2), stringsAsFactors=FALSE)
+
+#Clean the label names from before
+author_names = labels %>%
+  { strsplit(., '/', fixed=TRUE) } %>%
+  { lapply(., tail, n=1) } %>%  
+  { lapply(., paste0, collapse = '') } %>%
+  unlist
+
+#rename
+#all_files = lapply(read_files, readerPlain)
+#names(all_files) = author_names
+
+author_names = as.data.frame(author_names)
+
+
+#repeat all for test directory
+
+test_dir = Sys.glob(paths = '/Users/hannahjones/Desktop/ReutersC50/C50train/*')
+test_dir = test_dir[c(1:50)]
+read_files1 = NULL
+labels1 = NULL
+
+for(writer1 in test_dir){
+  author1 = substring(writer1, first = 1)
+  article1 = Sys.glob(paste0(writer1,'/*.txt'))
+  read_files1 = append(read_files1, article1)
+  labels1 = append(labels1, rep(author1, length(article1)) )
+}
+
+author_names1 = labels1 %>%
+  { strsplit(., '/', fixed=TRUE) } %>%
+  { lapply(., tail, n=1) } %>%  
+  { lapply(., paste0, collapse = '') } %>%
+  unlist
+
+## once you have documents in a vector, you 
+## create a text mining 'corpus' with: 
+documents_raw1 = Corpus(DirSource(test_dir))
+
+## Some pre-processing/tokenization steps.
+## tm_map just maps some function to every document in the corpus
+
+test_docs= documents_raw1%>% tm_map(., content_transformer(tolower)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removePunctuation)) %>%
+  tm_map(., content_transformer(stripWhitespace)) %>%
+  tm_map(., content_transformer(removeWords), stopwords("SMART"))
+
+## create a doc-term-matrix
+DTM_test2 = DocumentTermMatrix(test_docs, control = list(dictionary = Terms(DTM_train2)))
+DTM_test2
+DF_test<- data.frame(as.matrix(DTM_test2), stringsAsFactors=FALSE)
 
 ```
+
+Above are the details for the testing set which matches the training set.  
+
+Next, I remove any columns in the testing or training sets that contain no values (no words in articles), and I confirm that all columns match between testing and training.
+
+
+```{r}
+
+#remove zero columns
+training_df1<-DF_train[,which(colSums(DF_train) != 0)] 
+testing_df1<-DF_test[,which(colSums(DF_test) != 0)]
+
+#only keep matching columns
+testing_df1 = testing_df1[,intersect(colnames(testing_df1),colnames(training_df1))]
+training_df1 = training_df1[,intersect(colnames(testing_df1),colnames(training_df1))]
+```
+
+### PCA
+
+In order to try prediction models, I first use PCA to create principle components to use as variables in prediction.  I create principle components using the training data, and then predict the PCA values onto the testing data.  I then look at the cumulative variance explained versus the number of principle components in order to choose a number of principle components that explains about 75% of the variance. This occurs at PC263, so I will move forward using the first 263 principle components.  The chart below shows the sumulative sum of the variance versus the number of principle components.
+
+```{r echo = FALSE }
+####
+# Dimensionality reduction
+####
+
+mod_pca = prcomp(training_df1,scale=TRUE)
+pred_pca=predict(mod_pca,newdata = testing_df1)
+
+#plot(mod_pca, type = 'line') 
+#plot(mod_pca)
+
+var <- apply(mod_pca$x, 2, var)  
+prop <- var / sum(var)
+#cumsum(prop) # 75% of variance explained by PC 1 - 263
+plot(cumsum(mod_pca$sdev^2/sum(mod_pca$sdev^2)))
+```
+
+Once I summarized my training data using principle component analysis, I created a new training dataset with only the principle components, and author names.  I also created a testing dataset with the scaled predicted principle components, and author names.  I then ran a random forest model to predict author using the principle components in the training set.  Using this model, I predicted the outcomes on the testing set, and looked at the 'hitrate' (percent correct predictions).
+```{r}
+train_author = data.frame(mod_pca$x[,1:263])
+train_author['author']=author_names
+train_load = mod_pca$rotation[,1:263]
+
+test_author_pre <- scale(testing_df1) %*% train_load
+test_author <- as.data.frame(test_author_pre)
+test_author['author']=author_names1
+
+# run a random forest using PCA variables in train_author
+
+train_author$author = factor(train_author$author) 
+
+author_forest = randomForest(author ~ .,
+                              data = train_author, importance = TRUE)
+
+yhat_author = predict(author_forest, test_author)
+
+comp_table<-as.data.frame(table(yhat_author,as.factor(test_author$author)))
+predicted<-yhat_author
+actual<-as.factor(test_author$author)
+comp_table<-as.data.frame(cbind(actual,predicted))
+comp_table$flag<-ifelse(comp_table$actual==comp_table$predicted,1,0)
+sum(comp_table$flag)
+sum(comp_table$flag)*100/nrow(comp_table)
+```
+
+The two numbers above reflect the number of correct predictions out of 2500, and the percentage correct.  This model runs at about 50% accuracy.  
+
+### KNN Prediction
+
+Next, I will look at using a KNN model to see if I can improve the accuracy.  The KNN model will predict the author on the testing set using nearest neighbors prediction using k=5.
+
+```{r}
+#use KNN-- worse
+
+train.X = subset(train_author, select = -c(author))
+test.X = subset(test_author, select=-c(author))
+train.author=as.factor(train_author$author)
+test.author=as.factor(test_author$author)
+library(class)
+set.seed(1)
+knn_pred=knn(train.X,test.X,train.author,k=5)
+temp_knn=as.data.frame(cbind(knn_pred,test.author))
+temp_knn_flag<-ifelse(as.integer(knn_pred)==as.integer(test.author),1,0)
+sum(temp_knn_flag)
+sum(temp_knn_flag)*100/nrow(temp_knn)
+```
+
+As shown above, the KNN model works about half as well as the random forest.  I will opt to use the Random Forest model.
+
+### Conclusion
+
+In general, I would have hoped for higher accuracy using one of these models.  However, the random forest model performed fairly well and would likely 
 
 
 
