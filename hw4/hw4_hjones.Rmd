@@ -125,11 +125,18 @@ clust1 = kmeans(wine_train_scaled, 2, nstart=25)
 
 wine_clustered = data.frame(wine, clust1$cluster)
 
-wine_clustered <- wine_clustered%>%
+wine_clustered1 <- wine_clustered%>%
+  mutate(predicted = ifelse(clust1.cluster == 1, 0, 1))
+
+wine_clustered2 <- wine_clustered%>%
   mutate(predicted = ifelse(clust1.cluster == 1, 1, 0))
 
 #RMSE of clustering
-mean((wine_clustered$predicted - wine_clustered$color)^2) %>% sqrt
+RMSE1 = mean((wine_clustered1$predicted - wine_clustered1$color)^2) %>% sqrt
+RMSE2 = mean((wine_clustered2$predicted - wine_clustered2$color)^2) %>% sqrt
+
+RMSE = ifelse(RMSE1 < RMSE2, RMSE1, RMSE2)
+RMSE
 
 # What are the clusters?
 #clust1$center  # not super helpful
@@ -451,7 +458,7 @@ pred_pca=predict(mod_pca, newdata = testing_df1)
 
 var <- apply(mod_pca$x, 2, var)  
 prop <- var / sum(var)
-cumsum(prop) # 75% of variance explained by PC 1 - 263
+#cumsum(prop) # 75% of variance explained by PC 1 - 263
 plot(cumsum(mod_pca$sdev^2/sum(mod_pca$sdev^2)))
 ```
 
