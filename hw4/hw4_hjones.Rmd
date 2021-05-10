@@ -238,11 +238,12 @@ ggplot(social_cluster, aes(x =reorder(type, -cluster5) , y=cluster5)) +
 After some experimentation, I used kmeans++ to sort the tweet data into clusters.  After experimenting with various numbers of clusters, I chose to separate the data into 5 clusters.  These clusters are different sizes, but capture very specific interest groups. One cluster is by far the largest, and the other 4 are smaller in comparison, but capture more specific interests.  The five clusters can be summarized by their key topics below.
 
 #### Cluster topics: 
-Cluster A, "say it with a tweet": Current Events, Personal Fitness, Shopping
-Cluster B, "college kids": College, Online Gaming
-Cluster C, "pinterest crowd": Cooking, Fashion, Beauty
-Cluster D, "southern parents": Sports, religion, food, parenting
-Cluster E, "business crowd": politics, travel, news
+ 
+##### Cluster A, "say it with a tweet": Current Events, Personal Fitness, Shopping
+##### Cluster B, "college kids": College, Online Gaming
+##### Cluster C, "pinterest crowd": Cooking, Fashion, Beauty
+##### Cluster D, "southern parents": Sports, religion, food, parenting
+##### Cluster E, "business crowd": politics, travel, news
 
 I have created a nickname for each cluster based on the topics.  The largest cluster, Cluster A (5207 users), is most likely the cluster of people who tweet about anything and everything.  This cluster may be difficult to hone in on as it is more difficult to target specifically.  However, the other 4 clusters are very specific and easily targetable.  
 
@@ -379,7 +380,7 @@ author_names = as.data.frame(author_names)
 
 #repeat all for test directory
 
-test_dir = Sys.glob(paths = '/Users/hannahjones/Desktop/ReutersC50/C50train/*')
+test_dir = Sys.glob(paths = '/Users/hannahjones/Desktop/ReutersC50/C50test/*')
 test_dir = test_dir[c(1:50)]
 read_files1 = NULL
 labels1 = NULL
@@ -443,14 +444,14 @@ In order to try prediction models, I first use PCA to create principle component
 ####
 
 mod_pca = prcomp(training_df1,scale=TRUE)
-pred_pca=predict(mod_pca,newdata = testing_df1)
+pred_pca=predict(mod_pca, newdata = testing_df1)
 
 #plot(mod_pca, type = 'line') 
 #plot(mod_pca)
 
 var <- apply(mod_pca$x, 2, var)  
 prop <- var / sum(var)
-#cumsum(prop) # 75% of variance explained by PC 1 - 263
+cumsum(prop) # 75% of variance explained by PC 1 - 263
 plot(cumsum(mod_pca$sdev^2/sum(mod_pca$sdev^2)))
 ```
 
@@ -462,18 +463,19 @@ train_load = mod_pca$rotation[,1:263]
 
 test_author_pre <- scale(testing_df1) %*% train_load
 test_author <- as.data.frame(test_author_pre)
-test_author['author']=author_names1
+test_author['author']=author_names
 
 # run a random forest using PCA variables in train_author
 
 train_author$author = factor(train_author$author) 
+test_author$author = factor(test_author$author)
 
 author_forest = randomForest(author ~ .,
                               data = train_author, importance = TRUE)
 
 yhat_author = predict(author_forest, test_author)
 
-comp_table<-as.data.frame(table(yhat_author,as.factor(test_author$author)))
+comp_table<-as.data.frame(table(yhat_author,test_author$author))
 predicted<-yhat_author
 actual<-as.factor(test_author$author)
 comp_table<-as.data.frame(cbind(actual,predicted))
@@ -508,7 +510,7 @@ As shown above, the KNN model works about half as well as the random forest.  I 
 
 ### Conclusion
 
-In general, I would have hoped for higher accuracy using one of these models.  However, the random forest model performed fairly well and would likely 
+In general, I would have hoped for higher accuracy using one of these models.  However, the random forest model performed fairly well.
 
 
 
