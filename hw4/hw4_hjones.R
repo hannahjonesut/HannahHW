@@ -227,22 +227,24 @@ documents_raw = Corpus(DirSource(train_dir))
 
 ## Some pre-processing/tokenization steps.
 
-train_docs = documents_raw 
-train_docs = tm_map(train_docs, content_transformer(tolower))
-train_docs = tm_map(train_docs, content_transformer(removeNumbers)) 
-train_docs = tm_map(train_docs, content_transformer(removePunctuation))
-train_docs = tm_map(train_docs, content_transformer(stripWhitespace)) 
-train_docs = tm_map(train_docs, content_transformer(removeWords), stopwords("SMART"))
+train_docs <- documents_raw %>%
+  tm_map(., content_transformer(tolower)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removePunctuation)) %>%
+  tm_map(., content_transformer(stripWhitespace)) %>%
+  tm_map(., content_transformer(removeWords), stopwords("SMART"))
+
 
 ## create a doc-term-matrix, 2500 docs, 31423 terms
 DTM_train = DocumentTermMatrix(train_docs)
 
 ## Finally, drop those terms that only occur in one or two documents, 3076 terms
-DTM_train = removeSparseTerms(DTM_train, 0.96)
-tf_idf_mat = weightTfIdf(DTM_train)
+DTM_train2 = removeSparseTerms(DTM_train, 0.95)
+DTM_train2
 
 # Data frame of 2500 variables and 641 variables (The first matrix is completed)
-training_mat <- as.matrix(tf_idf_mat)
+DF_train <- data.frame(as.matrix(DTM_train2), stringsAsFactors=FALSE)
 
 #Clean the label names from before
 author_names = labels %>%
@@ -252,10 +254,10 @@ author_names = labels %>%
   unlist
 
 #rename
-all_files = lapply(read_files, readerPlain)
-names(all_files) = author_names
+#all_files = lapply(read_files, readerPlain)
+#names(all_files) = author_names
 
-#training_df <- data.frame(c(training_df, author_names))
+author_names = as.data.frame(author_names)
 
 
 #repeat all for test directory
@@ -266,15 +268,17 @@ read_files1 = NULL
 labels1 = NULL
 
 for(writer1 in test_dir){
-  author1 = substring(writer1, first = 69)
+  author1 = substring(writer1, first = 1)
   article1 = Sys.glob(paste0(writer1,'/*.txt'))
   read_files1 = append(read_files1, article1)
   labels1 = append(labels1, rep(author1, length(article1)) )
 }
 
-all_files1 = lapply(read_files1, readerPlain)
-#names(all_files1)= read_files1
-#names(all_files1) = sub('.txt', '', names(all_files1))
+author_names1 = labels1 %>%
+  { strsplit(., '/', fixed=TRUE) } %>%
+  { lapply(., tail, n=1) } %>%  
+  { lapply(., paste0, collapse = '') } %>%
+  unlist
 
 ## once you have documents in a vector, you 
 ## create a text mining 'corpus' with: 
@@ -283,40 +287,23 @@ documents_raw1 = Corpus(DirSource(test_dir))
 ## Some pre-processing/tokenization steps.
 ## tm_map just maps some function to every document in the corpus
 
-test_docs= documents_raw1 
-test_docs = tm_map(test_docs, content_transformer(tolower))
-test_docs = tm_map(test_docs, content_transformer(removeNumbers)) 
-test_docs = tm_map(test_docs, content_transformer(removePunctuation))
-test_docs = tm_map(test_docs, content_transformer(stripWhitespace)) 
-test_docs = tm_map(test_docs, content_transformer(removeWords), stopwords("SMART"))
+test_docs= documents_raw1%>% tm_map(., content_transformer(tolower)) %>% 
+  tm_map(., content_transformer(removeNumbers)) %>% 
+  tm_map(., content_transformer(removePunctuation)) %>%
+  tm_map(., content_transformer(stripWhitespace)) %>%
+  tm_map(., content_transformer(removeWords), stopwords("SMART"))
 
 ## create a doc-term-matrix
 DTM_test = DocumentTermMatrix(test_docs, control = list(dictionary = Terms(DTM_train)))
-tf_idf_test = weightTfIdf(DTM_test)
-DTM_test<-as.matrix(tf_idf_test)
+DTM_test2 = removeSparseTerms(DTM_test, 0.95)
 
-#testing matrix
-testing_mat <- as.matrix(DTM_test)
+DF_test<- data.frame(as.matrix(DTM_test2), stringsAsFactors=FALSE)
 
-#Clean the label names from before
-author_names1 = NULL
-author_names1 = labels1 %>%
-  { strsplit(., '/', fixed=TRUE) } %>%
-  { lapply(., tail, n=1) } %>%  
-  { lapply(., paste0, collapse = '') } %>%
-  unlist
 
-names(all_files1) = author_names1
-
-#DTM_train1 = removeSparseTerms(DTM_train, 0.95)
-#DTM_test1 = removeSparseTerms(DTM_test, 0.95)
-
-training_df1 <- data.frame(as.matrix(DTM_train), stringsAsFactors=FALSE)
-testing_df1 <- data.frame(as.matrix(DTM_test), stringsAsFactors=FALSE)
 
 #remove zero columns
-training_df1<-training_df1[,which(colSums(training_df1) != 0)] 
-testing_df1<-testing_df1[,which(colSums(testing_df1) != 0)]
+training_df1<-DF_train[,which(colSums(DF_train) != 0)] 
+testing_df1<-DF_test[,which(colSums(DF_test) != 0)]
 
 #only keep matching columns
 testing_df1 = testing_df1[,intersect(colnames(testing_df1),colnames(training_df1))]
@@ -330,15 +317,16 @@ mod_pca = prcomp(training_df1,scale=TRUE)
 pred_pca=predict(mod_pca,newdata = testing_df1)
 
 plot(mod_pca, type = 'line') 
+plot(mod_pca)
 
 var <- apply(mod_pca$x, 2, var)  
 prop <- var / sum(var)
-cumsum(prop) # 75% of variance explained by PC 1 - 333
+cumsum(prop) # 75% of variance explained by PC 1 - 263
 plot(cumsum(mod_pca$sdev^2/sum(mod_pca$sdev^2)))
 
-train_author = data.frame(mod_pca$x[,1:333])
+train_author = data.frame(mod_pca$x[,1:263])
 train_author['author']=author_names
-train_load = mod_pca$rotation[,1:333]
+train_load = mod_pca$rotation[,1:263]
 
 test_author_pre <- scale(testing_df1) %*% train_load
 test_author <- as.data.frame(test_author_pre)
@@ -347,14 +335,13 @@ test_author['author']=author_names1
 # run a random forest using PCA variables in train_author
 
 train_author$author = factor(train_author$author) 
-test_author$author = factor(test_author$author) 
 
 author_forest = randomForest(author ~ .,
-                              data = train_author)
+                              data = train_author, importance = TRUE)
 
 yhat_author = predict(author_forest, test_author)
 
-comp_table<-as.data.frame(table(yhat_author,test_author$author))
+comp_table<-as.data.frame(table(yhat_author,as.factor(test_author$author)))
 predicted<-yhat_author
 actual<-as.factor(test_author$author)
 comp_table<-as.data.frame(cbind(actual,predicted))
@@ -362,16 +349,20 @@ comp_table$flag<-ifelse(comp_table$actual==comp_table$predicted,1,0)
 sum(comp_table$flag)
 sum(comp_table$flag)*100/nrow(comp_table)
 
-plot(author_forest)
-varImpPlot(author_forest)
 
+#use KNN-- worse
 
-
-
-
-
-
-
+train.X = subset(train_author, select = -c(author))
+test.X = subset(test_author, select=-c(author))
+train.author=as.factor(train_author$author)
+test.author=as.factor(test_author$author)
+library(class)
+set.seed(1)
+knn_pred=knn(train.X,test.X,train.author,k=1)
+temp_knn=as.data.frame(cbind(knn_pred,test.author))
+temp_knn_flag<-ifelse(as.integer(knn_pred)==as.integer(test.author),1,0)
+sum(temp_knn_flag)
+sum(temp_knn_flag)*100/nrow(temp_knn)
 
 
 

@@ -33,6 +33,10 @@ library(tidyverse)
 library(slam)
 library(proxy)
 library(reshape2)
+
+library(cluster)
+library(HSAUR)
+library(fpc)
 ```
 
 ## Clustering and PCA: Wine Color and Quality 
@@ -43,33 +47,34 @@ The wine dataset details wine color, quality, and 11 chemical attributes.  Using
 #PROBLEM 1
 wine = read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/wine.csv')
 
-wine$ID <- seq.int(nrow(wine))
-
 wine<- wine%>%
   mutate(color = ifelse(color == 'red', 1, 0))
 
-wine_ID = wine %>%
-  group_by(ID)%>%
-  summarize_all(mean)%>%
-  column_to_rownames(var = "ID")
+wine_trim = select(wine, -c(color, quality))
 
-pca_ID = prcomp(wine_ID, rank=2, scale=TRUE)
-loadings_ID = pca_ID$rotation
-scores_ID = pca_ID$x
-summary(pca_ID)
+wine_trim = scale(wine_trim, center=TRUE, scale=TRUE)
 
-qplot(scores_ID[,1], scores_ID[,2], xlab='Component 1', ylab='Component 2', color = wine_ID$color)
-qplot(scores_ID[,1], scores_ID[,2], xlab='Component 1', ylab='Component 2', color = wine_ID$quality)
+mu = attr(wine_trim,"scaled:center") # mean
+sigma = attr(wine_trim,"scaled:scale")
+# Compare these random projections to the first PC
+wine_pca = prcomp(wine_trim, rank=2)
+
+loadings_wine = wine_pca$rotation
+scores_wine = wine_pca$x
+summary(wine_pca)
+
+qplot(scores_wine[,1], scores_wine[,2], xlab='Component 1', ylab='Component 2', color = wine$color)
+qplot(scores_wine[,1], scores_wine[,2], xlab='Component 1', ylab='Component 2', color = wine$quality)
 
 ```
 
-Clearly, component 1 is highly correlated with the wine color.  Neither component is correlated with quality.  I then combine the PC1 and PC2 variables with the dataset for each wine, and build a random forest model of wine color regressed on these components on a training set.  The resulting RMSE from testing the model on a test set against actual wine color is below (~0.05). Additionally, the variable importance plot below confirms that PC1 is most significant in predicting wine color.   
+Clearly, component 1 is highly correlated with the wine color.  Neither component is correlated with quality.  I then combine the PC1 and PC2 variables with the dataset for each wine, and build a random forest model of wine color regressed on these components on a training set.  The resulting RMSE from testing the model on a test set against actual wine color is below (~0.1). Additionally, the variable importance plot below confirms that PC1 is most significant in predicting wine color.   
 
 ```{r warning = FALSE}
 
 #Predict using PCA
 
-wine_combined = data.frame(wine, pca_ID$x)
+wine_combined = data.frame(wine, wine_pca$x)
 
 train_frac = 0.8
 N = nrow(wine_combined)
@@ -105,13 +110,13 @@ varImpPlot(forest_quality)
 
 ### Clustering for Wine Color and Quality
 
-I also ran k-means clustering to predict wine color by removing the color and quality variables, and splitting the data into 2 clusters based on the other 11 chemical elements.  To see how effectively the clusters captured color, I attached the cluster assignment to the data and observed that cluster 2 captures mostly red wines, and cluster 1 captures mostly white wines.  I then looked at the RMSE to see how well the clusters align with the actual wine color.  The kmeans-method captured wine color effectively with an RMSE of ~0.09.
+I also ran k-means clustering to predict wine color by removing the color and quality variables, and splitting the data into 2 clusters based on the other 11 chemical elements.  To see how effectively the clusters captured color, I attached the cluster assignment to the data and observed that cluster 1 captures mostly red wines, and cluster 2 captures mostly white wines.  I then looked at the RMSE to see how well the clusters align with the actual wine color.  The kmeans-method captured wine color effectively with an RMSE of ~0.11.
 
 ```{r}
 
 #use clustering - KMEANS
 
-wine_train = subset(wine, select = -c(color, quality, ID))
+wine_train = subset(wine, select = -c(color, quality))
 
 wine_train_scaled = scale(wine_train, center=TRUE, scale=TRUE)
 
@@ -125,7 +130,7 @@ clust1 = kmeans(wine_train_scaled, 2, nstart=25)
 wine_clustered = data.frame(wine, clust1$cluster)
 
 wine_clustered <- wine_clustered%>%
-  mutate(predicted = ifelse(clust1.cluster == 2, 1, 0))
+  mutate(predicted = ifelse(clust1.cluster == 1, 1, 0))
 
 #RMSE of clustering
 mean((wine_clustered$predicted - wine_clustered$color)^2) %>% sqrt
@@ -148,64 +153,160 @@ HOW CHOOSE # OF CLUSTERS
 
 In order to streamline and sharpen the marketing efforts of NutrientH2O, we have assembled a dataset of tweet categorizations for the brand's followers.  After analyzing this data, we have a few insights that may lead to more focused, productive marketing.
 
-First of all, looking only at the summery statistics of the tweet categories, we see that health and nutrition, politics and cooking have high tweet frequencies.  Looking a bit deeper, we can understand the nuance of how these topics interact with the other topics to gain a more robust understanding of NutrientH20's followers.
-
-
 ```{r}
-social_marketing <- read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/social_marketing.csv', row.names = 1)
+social_marketing <- read.csv('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/social_marketing.csv')
 
 social_marketing$ID <- seq.int(nrow(social_marketing))
 
-#cut chatter
-social_cut = social_marketing[,-1]
+#cut highly correlated
 
-cor(social_cut)
+social_cut = select(social_marketing, -c(X, chatter, spam, adult, photo_sharing, health_nutrition))
 
 #center and scale
-X = scale(social_marketing, center=TRUE, scale=TRUE)
+X = scale(social_cut, center=TRUE, scale=TRUE)
 mu = attr(X,"scaled:center")
 sigma = attr(X,"scaled:scale")
-clust1 = kmeans(X, 4, nstart=25)
 
-clust1$center  # not super helpful
-clust1$center[1,]*sigma + mu
-clust1$center[2,]*sigma + mu
-clust1$center[3,]*sigma + mu
-clust1$center[4,]*sigma + mu
+#ch metric
+k_grid = seq(2, 30, by=1)
+N = nrow(X)
+CH_grid = foreach(k = k_grid, .combine='c') %do% {
+  cluster_k = kmeans(X, k, nstart=50)
+  W = cluster_k$tot.withinss
+  B = cluster_k$betweenss
+  CH = (B/W)*((N-k)/(k-1))
+  CH 
+}
 
-#cluster 3 is hgtv vibes
-qplot(cooking, home_and_garden, data=social_marketing, color=factor(clust1$cluster))
+plot(k_grid, CH_grid, las=1)
 
-#cluster 4 is outdoors/green living
-qplot(eco, outdoors, data=social_marketing, color=factor(clust1$cluster))
+#choose k = 7
 
-#cluster 3 is beauty, cluster 4 is fitness& health and nutrition
-qplot(personal_fitness, beauty, data=social_marketing, color=factor(clust1$cluster))
+clust1 = kmeanspp(X, 5, nstart=25)
 
-#cluster 6 is parents, high school and parenting
-qplot(school, parenting, data=social_marketing, color=factor(clust1$cluster))
+clust1$size
 
-#cluster 2 is travel & news & current events, cluster 6 is food
-qplot(travel, food, data=social_marketing, color=factor(clust1$cluster))
-qplot(travel, news, data=social_marketing, color=factor(clust1$cluster))
-qplot(current_events, news, data=social_marketing, color=factor(clust1$cluster))
+plotcluster(social_cut, clust1$cluster)
 
-#cluster 2 is travel, cluster 1 is business
-qplot(business, travel, data=social_marketing, color=factor(clust1$cluster))
+#one large cluster, rest same size-- lets learn more
+cluster1 <- clust1$center[1,]*sigma + mu
+cluster2 <- clust1$center[2,]*sigma + mu
+cluster3 <- clust1$center[3,]*sigma + mu
+cluster4 <- clust1$center[4,]*sigma + mu
+cluster5 <- clust1$center[5,]*sigma + mu
 
-#cluster 5 is sports and online gaming, cluster 4 is health and personal fitness, clusters 1 &2 are low of both
-qplot(health_nutrition, sports_playing, data=social_marketing, color=factor(clust1$cluster))
-qplot(health_nutrition, personal_fitness, data=social_marketing, color=factor(clust1$cluster))
-qplot(online_gaming, computers, data=social_marketing, color=factor(clust1$cluster))
 
-#seems like health and nutrition cluster is most active
+social_cluster <- cbind(cluster1, cluster2, cluster3, cluster4, cluster5)
+social_cluster = as.data.frame(social_cluster)
+social_cluster$type <- row.names(social_cluster)
+#remove ID
+social_cluster = social_cluster[-32,]
+
+ggplot(social_cluster, aes(x =reorder(type, -cluster1) , y=cluster1)) +
+  geom_bar(stat="identity", position ="dodge") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=-40, hjust=.1)) + 
+  labs(title="Cluster 1",
+        x ="Category", y = "Cluster centre values")
+
+ggplot(social_cluster, aes(x =reorder(type, -cluster2) , y=cluster2)) +
+  geom_bar(stat="identity", position ="dodge") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=-40, hjust=.1)) + 
+  labs(title="Cluster 2",
+        x ="Category", y = "Cluster centre values")
+
+ggplot(social_cluster, aes(x =reorder(type, -cluster3) , y=cluster3)) +
+  geom_bar(stat="identity", position ="dodge") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=-40, hjust=.1)) + 
+  labs(title="Cluster 3",
+        x ="Category", y = "Cluster centre values")
+
+ggplot(social_cluster, aes(x =reorder(type, -cluster4) , y=cluster4)) +
+  geom_bar(stat="identity", position ="dodge") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=-40, hjust=.1)) + 
+  labs(title="Cluster 4",
+        x ="Category", y = "Cluster centre values")
+
+ggplot(social_cluster, aes(x =reorder(type, -cluster5) , y=cluster5)) +
+  geom_bar(stat="identity", position ="dodge") + 
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle=-40, hjust=.1)) + 
+  labs(title="Cluster 5",
+        x ="Category", y = "Cluster centre values")
 
 ```
 
+After some experimentation, I used kmeans++ to sort the tweet data into clusters.  After experimenting with various numbers of clusters, I chose to separate the data into 5 clusters.  These clusters are different sizes, but capture very specific interest groups. One cluster is by far the largest, and the other 4 are smaller in comparison, but capture more specific interests.  The five clusters can be summarized by their key topics below.
+
+#### Cluster topics: 
+Cluster A, "say it with a tweet": Current Events, Personal Fitness, Shopping
+Cluster B, "college kids": College, Online Gaming
+Cluster C, "pinterest crowd": Cooking, Fashion, Beauty
+Cluster D, "southern parents": Sports, religion, food, parenting
+Cluster E, "business crowd": politics, travel, news
+
+I have created a nickname for each cluster based on the topics.  The largest cluster, Cluster A (5207 users), is most likely the cluster of people who tweet about anything and everything.  This cluster may be difficult to hone in on as it is more difficult to target specifically.  However, the other 4 clusters are very specific and easily targetable.  
+
+The "college kids" (455 users) cluster tweets about gaming and their colleges, as well as about sports.  Targeting this crowd with University-specific campaigns may be effective.
+
+The "pinterest crowd" cluster (639 users) tweets often about cooking, fashion and beauty.  These three topics usually draw in a crowd that would be a heavy user of the platform Pinterest which enables users to easily find recipes, clothes, and cooking techniques, among other things.  This segment could be targeted through partnering with specific brands or going the "influencer" route and paying for instagram influencers to promote product.
+
+The "southern parents"  (830 users) cluster tweets often about sports, religion, food and parenting.  This cluster can be targeted through ads during sporting events or by appealing to the benefits of the product for children or for energy needed when raising children.
+
+The final cluster is the "business crowd" (751 users) who tweet about politics, travel and news.  This segment can be targeted through newspapers, travel lounges, or other news outlets.
+
+Each cluster can be grown by using a targeted, thoughtful approach to marketing.
+
+
+
+
+
 ## Association Rules for Grocery Purchases
+
+Using data from ~9800 grocery baskets, I have created a set of rules that reflect buying behavior.  After playing with the support and confidence levels, I chose to create rules based on a support level of > 0.0025, confidence of over 0.5, and with a maximum cart size of 8 items.  This specification created 645 'rules'.  After a lot of playing around with the confidence and support levels, I chose these levels to see a variety of relatively likely combinations, to then trim down into more likely rules.  The support level indicates the proportion of times any combination of items occurred in the dataset.  A support level of at least 0.0025 means that at the bare minimum, any rule must have occurred in the cart 25 times.  The confidence level captures the probability the right hand side groceries are in the cart, given the left hand side groceries are in the cart.  I felt a 50% confidence was a sufficient floor to work from.  Finally, I made the minimum length 1 item in order to capture in highly likely, single item purchases.
+
+After creating this set of rules, I trimmed the rules down to only include rules with confidence over 50%.  Below is the plot of the full set of 171 rules.   The lift range on the graph details the increase in probability that the right hand side occurs, given the left hand side occurs.
+
+```{r echo = FALSE, warning = FALSE}
+
+groceries <- read_lines('https://raw.githubusercontent.com/jgscott/ECO395M/master/data/groceries.txt', skip = 0, n_max = -1L)
+
+groceries <- as.data.frame(groceries)
+
+lists <- strsplit(groceries$groceries, split = ",")
+all_lists = lapply(lists, unique)
+listtrans = as(all_lists, "transactions")
+
+groceryrules2 = apriori(listtrans, 
+                     parameter=list(support=.0025, confidence=.25, minlen=1))
+
+arules::inspect(subset(groceryrules2, lift > 4))
+
+plot(groceryrules2)
+
+```
+
+
+Using the trimmed subset with confidence > 0.6 and support > 0.005 yields the 22 rules below.  Notice that the lift for these rules ranges from ~2-3.  These rules reflect the frequency with which customers purchase whole milk and vegetables. It seems that these two items are the only ones that can be predicted with high confidence and support, likely due the frequency with which they are purchased.    
 
 ```{r}
 
+sub1 = subset(groceryrules, subset=confidence > 0.6 & support > 0.005)
+arules::inspect(sub1)
+plot(sub1, method='graph')
+
+
+```
+
+If we loosen the rules and only require that the lift be greater than 15, we find these rules below.  Sorting rules based on lift instead of confidence demonstrates clusters of items that are frequently bought together, even if they do not occur enough to result in high confidence or support.  The clusters below can be loosely interpreted as an alcohol cluster, a snack cluster, a baking cluster, a sandwich cluster, and other non-specific clusters.
+
+```{r}
+sub2 = subset(groceryrules, subset=lift>15)
+arules::inspect(sub2)
+plot(sub2, method='graph')
 
 ```
 

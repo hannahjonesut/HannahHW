@@ -92,3 +92,19 @@ author_names = as.data.frame(author_names)
 
 
 split_names <- colsplit(mynames, "(?<=\\p{L})(?=[\\d+$])", c("Author", "File"))
+
+hclustfunc <- function(x, method = "single", dmeth = "euclidean") {    
+  hclust(dist(x, method = dmeth), method = method)
+}
+
+fit <- hclustfunc(X)
+
+tweet_dist = dist(X)
+hier_tweet = hclust(tweet_dist, method = 'average')
+
+plot(hier_tweet, cex=0.8)
+
+cluster1 = cutree(fit, k=5)
+
+summary(factor(cluster1))
+
