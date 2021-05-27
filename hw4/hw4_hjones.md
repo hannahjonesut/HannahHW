@@ -65,7 +65,6 @@ objective and dictated by a diverse group of people and palates.
 Market Segmentation: Twitter Marketing
 --------------------------------------
 
-HOW CHOOSE \# OF CLUSTERS
 
 In order to streamline and sharpen the marketing efforts of NutrientH2O,
 we have assembled a dataset of tweet categorizations for the brand’s
